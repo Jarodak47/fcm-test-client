@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FCM Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #token-display {
+            word-break: break-all;
+            background-color: #e9e9e9;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        #notifications-container {
+            margin-top: 20px;
+        }
+        .notification {
+            background-color: white;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>FCM Test Client</h1>
+    
+    <div class="container">
+        <h2>Gestion des notifications</h2>
+        <button id="permission-btn">Autoriser les notifications</button>
+        <button id="token-btn">Obtenir le token FCM</button>
+        <div id="token-display"></div>
+    </div>
+
+    <div id="notifications-container" class="container">
+        <h2>Notifications reçues</h2>
+        <div id="notifications-list"></div>
+    </div>
+
+    <script type="module">
+        import { requestPermissionAndGetToken, listenMessages } from "./src/firebaseConfig.js";
+
+        const permissionBtn = document.getElementById('permission-btn');
+        const tokenBtn = document.getElementById('token-btn');
+        const tokenDisplay = document.getElementById('token-display');
+        const notificationsList = document.getElementById('notifications-list');
+
+        // Mise à jour du bouton selon l'état des permissions
+        function updatePermissionButton() {
+            if (Notification.permission === 'granted') {
+                permissionBtn.textContent = 'Notifications autorisées';
+                permissionBtn.disabled = true;
+                tokenBtn.disabled = false;
+            } else if (Notification.permission === 'denied') {
+                permissionBtn.textContent = 'Notifications bloquées';
+                permissionBtn.disabled = true;
+                tokenBtn.disabled = true;
+            } else {
+                permissionBtn.textContent = 'Autoriser les notifications';
+                permissionBtn.disabled = false;
+                tokenBtn.disabled = true;
+            }
+        }
+
+        // Initialisation
+        updatePermissionButton();
+
+        // Gestion des événements
+        permissionBtn.addEventListener('click', async () => {
+            try {
+                const result = await Notification.requestPermission();
+                updatePermissionButton();
+                if (result === 'granted') {
+                    registerServiceWorker();
+                }
+            } catch (error) {
+                console.error('Erreur lors de la demande de permission:', error);
+            }
+        });
+
+        tokenBtn.addEventListener('click', async () => {
+            try {
+                const token = await requestPermissionAndGetToken();
+                tokenDisplay.textContent = token || 'Impossible d\'obtenir le token';
+            } catch (error) {
+                tokenDisplay.textContent = 'Erreur : ' + error.message;
+            }
+        });
+
+        // Enregistrement du service worker
+        async function registerServiceWorker() {
+            if ("serviceWorker" in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register("/public/firebase-messaging-sw.js", { scope: '/public/' });
+                    console.log("✅ Service Worker enregistré :", registration);
+                    listenMessages((payload) => {
+                        // Afficher la notification dans la liste
+                        const notif = document.createElement('div');
+                        notif.className = 'notification';
+                        notif.innerHTML = `
+                            <h3>${payload.notification?.title || 'Nouvelle notification'}</h3>
+                            <p>${payload.notification?.body || 'Pas de contenu'}</p>
+                            <small>${new Date().toLocaleString()}</small>
+                        `;
+                        notificationsList.prepend(notif);
+                    });
+                } catch (err) {
+                    console.error("❌ Erreur d'enregistrement SW :", err);
+                }
+            }
+        }
+
+        // Vérifier si les notifications sont déjà autorisées
+        if (Notification.permission === 'granted') {
+            registerServiceWorker();
+        }
+    </script>
+</body>
+</html>
